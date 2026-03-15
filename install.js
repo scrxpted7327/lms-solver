@@ -17,7 +17,7 @@
 // @run-at       document-idle
 // @homepage     https://github.com/scrxpted7327/lms-solver
 // @supportURL   https://github.com/scrxpted7327/lms-solver/issues
-// @updateURL    https://raw.githubusercontent.com/scrxpted7327/lms-solver/main/version.json
+// @updateURL    https://raw.githubusercontent.com/scrxpted7327/lms-solver/main/version.txt
 // @downloadURL  https://raw.githubusercontent.com/scrxpted7327/lms-solver/main/install.js
 // ==/UserScript==
 
