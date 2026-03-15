@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         LMS AI Solver
-// @version      2.0.2
+// @version      2.0.3
 // @description  AI-powered solver for Mobius, Smartwork5, Canvas, and other LMS platforms
 // @namespace    http://tampermonkey.net/
 // @author       scrxpted7327
@@ -396,26 +396,41 @@
     try {
       const coreCode = await fetchFromPrivateRepo('core.js');
 
-      // Strategy 1: Direct eval (works in TM sandbox, fails with strict CSP)
+      // Strategy 1: Direct eval() in TM sandbox (has GM_* access)
+      // NOTE: Must be DIRECT eval (not indirect) to inherit TM sandbox scope
       try {
-        (0, eval)(coreCode);
+        eval(coreCode); // eslint-disable-line no-eval
         console.log('[LMS Shell] Core loaded via eval()');
         return;
       } catch (evalErr) {
-        console.warn('[LMS Shell] eval() blocked by CSP, trying new Function()...');
+        console.warn('[LMS Shell] eval() failed:', evalErr.message);
       }
 
-      // Strategy 2: new Function() with GM_* passed explicitly
+      // Strategy 2: new Function() with GM_* passed as arguments
+      // Core.js IIFE needs GM_* - we inject them into global scope before running
       try {
-        const fn = new Function(
-          'GM_xmlhttpRequest',
-          'GM_setValue',
-          'GM_getValue',
-          'GM_registerMenuCommand',
-          coreCode
-        );
-        fn(GM_xmlhttpRequest, GM_setValue, GM_getValue, GM_registerMenuCommand);
-        console.log('[LMS Shell] Core loaded via new Function()');
+        // Temporarily expose GM_* to global scope for core.js IIFE
+        const savedGM = {
+          GM_xmlhttpRequest: window.GM_xmlhttpRequest,
+          GM_setValue: window.GM_setValue,
+          GM_getValue: window.GM_getValue,
+          GM_registerMenuCommand: window.GM_registerMenuCommand,
+        };
+        window.GM_xmlhttpRequest = GM_xmlhttpRequest;
+        window.GM_setValue = GM_setValue;
+        window.GM_getValue = GM_getValue;
+        window.GM_registerMenuCommand = GM_registerMenuCommand;
+
+        const fn = new Function(coreCode);
+        fn();
+
+        // Restore original values (undefined if they weren't set)
+        Object.entries(savedGM).forEach(([k, v]) => {
+          if (v === undefined) delete window[k];
+          else window[k] = v;
+        });
+
+        console.log('[LMS Shell] Core loaded via new Function() with GM injection');
         return;
       } catch (fnErr) {
         console.warn('[LMS Shell] new Function() failed:', fnErr.message);
