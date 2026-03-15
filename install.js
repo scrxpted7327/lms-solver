@@ -152,7 +152,7 @@
           if (response.status === 200) {
             try {
               const data = JSON.parse(response.responseText);
-              const content = atob(data.content.replace(/\n/g, ''));
+              const content = atob(data.content.replace(/[\r\n]/g, ''));
               // Cache the result
               GM_setValue(KEY_MODULES + path, {
                 content: content,
@@ -432,12 +432,6 @@
       if (e.message.includes('token') || e.message.includes('401') || e.message.includes('403')) {
         clearPat();
         showError('Authentication failed. Refresh to re-enter token.');
-      } else {
-        showError(e.message);
-      }
-    }
-  }
-        showError('Authentication failed. Please refresh to re-enter your token.');
       } else {
         showError(e.message);
       }
