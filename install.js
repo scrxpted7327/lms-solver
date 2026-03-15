@@ -367,9 +367,9 @@
   function isOnLMSPage(manifest) {
     if (!manifest || !manifest.lms) return false;
     const url = window.location.href.toLowerCase();
+    const urlPatterns = manifest.lms.url_patterns || {};
 
-    for (const [, config] of Object.entries(manifest.lms)) {
-      const patterns = config.url_patterns || [];
+    for (const [, patterns] of Object.entries(urlPatterns)) {
       for (const pattern of patterns) {
         const regexStr = pattern
           .toLowerCase()
