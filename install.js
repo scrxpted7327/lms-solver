@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         LMS AI Solver
-// @version      2.0.7
+// @version      2.0.8
 // @description  AI-powered solver for Mobius, Smartwork5, Canvas, and other LMS platforms
 // @namespace    http://tampermonkey.net/
 // @author       scrxpted7327
@@ -63,10 +63,8 @@
   /** Storage keys */
   const KEY_PAT = 'lms_solver_github_token';
   const KEY_MODULES = 'lms_solver_modules_';
+  const KEY_COMMIT = 'lms_solver_commit';
   const KEY_SHELL_VERSION = 'lms_solver_shell_version';
-
-  /** Cache TTL: 24 hours */
-  const CACHE_TTL = 86400000;
 
   /** Request timeout: 30 seconds */
   const FETCH_TIMEOUT = 30000;
@@ -122,25 +120,82 @@
   // ═══════════════════════════════════════════════════
 
   /**
+   * Fetch the latest commit SHA from the private repo.
+   * Used for deterministic cache invalidation (like Lua commit.txt pattern).
+   *
+   * @returns {Promise<string>} 40-char commit SHA
+   */
+  async function fetchLatestCommitSha() {
+    return new Promise((resolve, reject) => {
+      GM_xmlhttpRequest({
+        method: 'GET',
+        url: `https://api.github.com/repos/${PRIVATE_REPO}/commits/${PRIVATE_BRANCH}`,
+        headers: getAuthHeaders(),
+        timeout: 10000,
+        onload: (resp) => {
+          if (resp.status === 200) {
+            try {
+              const data = JSON.parse(resp.responseText);
+              resolve(data.sha);
+            } catch (e) {
+              reject(new Error('Failed to parse commit SHA'));
+            }
+          } else {
+            reject(new Error(`HTTP ${resp.status} fetching commit SHA`));
+          }
+        },
+        onerror: () => reject(new Error('Network error fetching commit SHA')),
+        ontimeout: () => reject(new Error('Timeout fetching commit SHA')),
+      });
+    });
+  }
+
+  /**
+   * Wipe all cached modules (like Lua wipeFolder pattern).
+   * Called when commit SHA changes, indicating new code on the repo.
+   */
+  function wipeModuleCache() {
+    const knownKeys = GM_getValue(KEY_MODULES + '_keys', []);
+    for (const key of knownKeys) {
+      GM_setValue(key, null);
+    }
+    GM_setValue(KEY_MODULES + '_keys', []);
+    console.log(`[LMS Shell] Cache wiped (${knownKeys.length} entries)`);
+  }
+
+  /**
+   * Track a storage key for later cache wiping.
+   * @param {string} key - Storage key to track
+   */
+  function trackModuleKey(key) {
+    const knownKeys = GM_getValue(KEY_MODULES + '_keys', []);
+    if (!knownKeys.includes(key)) {
+      knownKeys.push(key);
+      GM_setValue(KEY_MODULES + '_keys', knownKeys);
+    }
+  }
+
+  /**
    * Fetch a file from the private repo via GitHub API.
+   * Uses commit SHA for deterministic, pinned content (not branch name).
    * Decodes base64 content from the API response.
    *
    * @param {string} path - File path relative to userscript/
-   * @param {boolean} useCache - Whether to use cached content
+   * @param {string} commitSha - Commit SHA to fetch from (pinned version)
    * @returns {Promise<string>} File content
    */
-  async function fetchFromPrivateRepo(path, useCache = true) {
-    // Check cache first
-    if (useCache) {
-      const cached = GM_getValue(KEY_MODULES + path, null);
-      if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
-        console.log(`[LMS Shell] Using cached: ${path}`);
-        return cached.content;
-      }
+  async function fetchFromPrivateRepo(path, commitSha) {
+    const cacheKey = KEY_MODULES + path;
+
+    // Check cache - content from the same commit SHA is always valid
+    const cached = GM_getValue(cacheKey, null);
+    if (cached && cached.sha === commitSha) {
+      console.log(`[LMS Shell] Cache hit: ${path} (${commitSha.substring(0, 7)})`);
+      return cached.content;
     }
 
-    const url = GH_API_BASE + path + `?ref=${PRIVATE_BRANCH}&t=${Date.now()}`;
-    console.log(`[LMS Shell] Fetching: ${path}`);
+    const url = GH_API_BASE + path + `?ref=${commitSha}`;
+    console.log(`[LMS Shell] Fetching: ${path} @ ${commitSha.substring(0, 7)}`);
 
     return new Promise((resolve, reject) => {
       GM_xmlhttpRequest({
@@ -153,11 +208,13 @@
             try {
               const data = JSON.parse(response.responseText);
               const content = atob(data.content.replace(/[\r\n]/g, ''));
-              // Cache the result
-              GM_setValue(KEY_MODULES + path, {
+              // Cache with commit SHA for deterministic validation
+              GM_setValue(cacheKey, {
                 content: content,
+                sha: commitSha,
                 timestamp: Date.now(),
               });
+              trackModuleKey(cacheKey);
               resolve(content);
             } catch (e) {
               reject(new Error(`Failed to decode ${path}: ${e.message}`));
@@ -399,21 +456,27 @@
     console.log('[LMS Shell] Loading core from private repo...');
 
     try {
-      // Fetch manifest first to get expected core version
-      const manifest = await fetchPublicManifest();
-      const expectedVersion = manifest?.core?.version || '0.0.0';
-      const cachedVersion = GM_getValue(KEY_MODULES + '_version', '0.0.0');
-
-      // Force cache bust if version changed
-      const useCache = (expectedVersion === cachedVersion);
-
-      if (!useCache) {
-        console.log(`[LMS Shell] Version changed: ${cachedVersion} → ${expectedVersion}, busting cache`);
-        GM_setValue(KEY_MODULES + 'core.js', null);
-        GM_setValue(KEY_MODULES + '_version', expectedVersion);
+      // Step 1: Fetch latest commit SHA from private repo
+      let commitSha;
+      try {
+        commitSha = await fetchLatestCommitSha();
+        console.log(`[LMS Shell] Latest commit: ${commitSha.substring(0, 7)}`);
+      } catch (e) {
+        console.warn('[LMS Shell] Could not fetch commit SHA, using cached if available');
+        commitSha = GM_getValue(KEY_COMMIT, null);
+        if (!commitSha) throw new Error('No commit SHA available and no cache');
       }
 
-      const coreCode = await fetchFromPrivateRepo('core.js', useCache);
+      // Step 2: Compare with stored commit SHA (like Lua commit.txt pattern)
+      const storedSha = GM_getValue(KEY_COMMIT, null);
+      if (storedSha && storedSha !== commitSha) {
+        console.log(`[LMS Shell] Commit changed: ${storedSha.substring(0, 7)} → ${commitSha.substring(0, 7)}, wiping cache`);
+        wipeModuleCache();
+      }
+      GM_setValue(KEY_COMMIT, commitSha);
+
+      // Step 3: Fetch core.js using pinned commit SHA (deterministic, not cached by GitHub)
+      const coreCode = await fetchFromPrivateRepo('core.js', commitSha);
 
       // Expose GM_* functions to page context via unsafeWindow
       // core.js will read them from window.__GM_* when running in page context
