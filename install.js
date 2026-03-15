@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         LMS AI Solver
-// @version      2.0.4
+// @version      2.0.5
 // @description  AI-powered solver for Mobius, Smartwork5, Canvas, and other LMS platforms
 // @namespace    http://tampermonkey.net/
 // @author       scrxpted7327
@@ -17,8 +17,8 @@
 // @run-at       document-idle
 // @homepage     https://github.com/scrxpted7327/lms-solver
 // @supportURL   https://github.com/scrxpted7327/lms-solver/issues
-// @updateURL    https://raw.githubusercontent.com/scrxpted7327/lms-solver/main/version.txt
-// @downloadURL  https://raw.githubusercontent.com/scrxpted7327/lms-solver/main/install.js
+// @updateURL    https://raw.githubusercontent.com/scrxpted7327/lms-solver/refs/heads/main/version.txt
+// @downloadURL  https://raw.githubusercontent.com/scrxpted7327/lms-solver/refs/heads/main/install.js
 // ==/UserScript==
 
 /**
@@ -139,7 +139,7 @@
       }
     }
 
-    const url = GH_API_BASE + path + `?ref=${PRIVATE_BRANCH}`;
+    const url = GH_API_BASE + path + `?ref=${PRIVATE_BRANCH}&t=${Date.now()}`;
     console.log(`[LMS Shell] Fetching: ${path}`);
 
     return new Promise((resolve, reject) => {
@@ -326,7 +326,8 @@
 
   /** Public repo for manifest/version checking (no auth needed) */
   const PUBLIC_REPO = 'scrxpted7327/lms-solver';
-  const PUBLIC_MANIFEST_URL = `https://raw.githubusercontent.com/${PUBLIC_REPO}/main/version.json`;
+  const PUBLIC_BRANCH = 'refs/heads/main';
+  const PUBLIC_MANIFEST_URL = `https://raw.githubusercontent.com/${PUBLIC_REPO}/${PUBLIC_BRANCH}/version.json`;
 
   /**
    * Fetch the public manifest to check LMS patterns.
@@ -335,10 +336,13 @@
    * @returns {Promise<Object|null>} Manifest or null
    */
   async function fetchPublicManifest() {
+    // Cache bust with timestamp to avoid stale raw.githubusercontent.com cache
+    const url = PUBLIC_MANIFEST_URL + '?t=' + Date.now();
     return new Promise((resolve) => {
       GM_xmlhttpRequest({
         method: 'GET',
-        url: PUBLIC_MANIFEST_URL,
+        url: url,
+        cache: 'no-cache',
         timeout: 10000,
         onload: (resp) => {
           if (resp.status === 200) {
