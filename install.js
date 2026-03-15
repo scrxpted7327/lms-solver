@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         LMS AI Solver
-// @version      2.0.6
+// @version      2.0.7
 // @description  AI-powered solver for Mobius, Smartwork5, Canvas, and other LMS platforms
 // @namespace    http://tampermonkey.net/
 // @author       scrxpted7327
@@ -399,7 +399,21 @@
     console.log('[LMS Shell] Loading core from private repo...');
 
     try {
-      const coreCode = await fetchFromPrivateRepo('core.js');
+      // Fetch manifest first to get expected core version
+      const manifest = await fetchPublicManifest();
+      const expectedVersion = manifest?.core?.version || '0.0.0';
+      const cachedVersion = GM_getValue(KEY_MODULES + '_version', '0.0.0');
+
+      // Force cache bust if version changed
+      const useCache = (expectedVersion === cachedVersion);
+
+      if (!useCache) {
+        console.log(`[LMS Shell] Version changed: ${cachedVersion} → ${expectedVersion}, busting cache`);
+        GM_setValue(KEY_MODULES + 'core.js', null);
+        GM_setValue(KEY_MODULES + '_version', expectedVersion);
+      }
+
+      const coreCode = await fetchFromPrivateRepo('core.js', useCache);
 
       // Expose GM_* functions to page context via unsafeWindow
       // core.js will read them from window.__GM_* when running in page context
