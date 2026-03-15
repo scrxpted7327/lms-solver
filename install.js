@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         LMS AI Solver
-// @version      3.0.1
+// @version      3.0.2
 // @description  AI-powered solver for Mobius, Smartwork5, Canvas, and other LMS platforms
 // @namespace    http://tampermonkey.net/
 // @author       scrxpted7327
@@ -9,13 +9,15 @@
 // @grant        GM_setValue
 // @grant        GM_getValue
 // @grant        GM_registerMenuCommand
+// @grant        unsafe-eval
 // @connect      api.github.com
+// @connect      raw.githubusercontent.com
 // @connect      localhost
 // @run-at       document-idle
 // @homepage     https://github.com/scrxpted7327/lms-solver
 // @supportURL   https://github.com/scrxpted7327/lms-solver/issues
-// @updateURL    https://raw.githubusercontent.com/scrxpted7327/lms-solver/main/userscript/version.json
-// @downloadURL  https://raw.githubusercontent.com/scrxpted7327/lms-solver/main/userscript/install.js
+// @updateURL    https://raw.githubusercontent.com/scrxpted7327/lms-solver/main/version.json
+// @downloadURL  https://raw.githubusercontent.com/scrxpted7327/lms-solver/main/install.js
 // ==/UserScript==
 
 /**
@@ -318,12 +320,75 @@
   }
 
   // ═══════════════════════════════════════════════════
+  // LMS DETECTION (before core loads)
+  // ═══════════════════════════════════════════════════
+
+  /** Public repo for manifest/version checking (no auth needed) */
+  const PUBLIC_REPO = 'scrxpted7327/lms-solver';
+  const PUBLIC_MANIFEST_URL = `https://raw.githubusercontent.com/${PUBLIC_REPO}/main/version.json`;
+
+  /**
+   * Fetch the public manifest to check LMS patterns.
+   * This is called BEFORE requiring a PAT or loading core.
+   *
+   * @returns {Promise<Object|null>} Manifest or null
+   */
+  async function fetchPublicManifest() {
+    return new Promise((resolve) => {
+      GM_xmlhttpRequest({
+        method: 'GET',
+        url: PUBLIC_MANIFEST_URL,
+        timeout: 10000,
+        onload: (resp) => {
+          if (resp.status === 200) {
+            try {
+              resolve(JSON.parse(resp.responseText));
+            } catch (e) {
+              console.warn('[LMS Shell] Failed to parse manifest:', e.message);
+              resolve(null);
+            }
+          } else {
+            resolve(null);
+          }
+        },
+        onerror: () => resolve(null),
+        ontimeout: () => resolve(null),
+      });
+    });
+  }
+
+  /**
+   * Check if current page matches any LMS URL pattern.
+   *
+   * @param {Object} manifest - Version manifest with lms config
+   * @returns {boolean}
+   */
+  function isOnLMSPage(manifest) {
+    if (!manifest || !manifest.lms) return false;
+    const url = window.location.href.toLowerCase();
+
+    for (const [, config] of Object.entries(manifest.lms)) {
+      const patterns = config.url_patterns || [];
+      for (const pattern of patterns) {
+        const regexStr = pattern
+          .toLowerCase()
+          .replace(/[.+^${}()|[\]\\]/g, '\\$&')
+          .replace(/\*/g, '.*');
+        if (new RegExp(`^${regexStr}$`).test(url)) {
+          return true;
+        }
+      }
+    }
+    return false;
+  }
+
+  // ═══════════════════════════════════════════════════
   // CORE LOADER
   // ═══════════════════════════════════════════════════
 
   /**
    * Load and execute core.js from the private repo.
-   * This bootstraps the entire application.
+   * Uses multiple execution strategies to handle CSP restrictions.
    */
   async function loadCore() {
     console.log('[LMS Shell] Loading core from private repo...');
@@ -331,22 +396,64 @@
     try {
       const coreCode = await fetchFromPrivateRepo('core.js');
 
-      // Execute core.js in Tampermonkey sandbox
-      // NOTE: new Function() runs in page context where GM_* are NOT available
-      // eval() runs in the userscript sandbox where GM_* ARE available
+      // Strategy 1: Direct eval (works in TM sandbox, fails with strict CSP)
       try {
-        (0, eval)(coreCode); // Indirect eval runs in global scope but inherits TM sandbox
-        console.log('[LMS Shell] Core loaded successfully');
-      } catch (e) {
-        console.error('[LMS Shell] Core execution error:', e);
-        showError('Core module failed to execute: ' + e.message);
+        (0, eval)(coreCode);
+        console.log('[LMS Shell] Core loaded via eval()');
+        return;
+      } catch (evalErr) {
+        console.warn('[LMS Shell] eval() blocked by CSP, trying new Function()...');
       }
+
+      // Strategy 2: new Function() with GM_* passed explicitly
+      try {
+        const fn = new Function(
+          'GM_xmlhttpRequest',
+          'GM_setValue',
+          'GM_getValue',
+          'GM_registerMenuCommand',
+          coreCode
+        );
+        fn(GM_xmlhttpRequest, GM_setValue, GM_getValue, GM_registerMenuCommand);
+        console.log('[LMS Shell] Core loaded via new Function()');
+        return;
+      } catch (fnErr) {
+        console.warn('[LMS Shell] new Function() failed:', fnErr.message);
+      }
+
+      // Strategy 3: Blob URL injection (page context, no GM_* but DOM access)
+      try {
+        const blob = new Blob([coreCode], { type: 'application/javascript' });
+        const url = URL.createObjectURL(blob);
+        const script = document.createElement('script');
+        script.src = url;
+        script.onload = () => {
+          URL.revokeObjectURL(url);
+          console.log('[LMS Shell] Core loaded via Blob URL (page context)');
+        };
+        script.onerror = () => {
+          URL.revokeObjectURL(url);
+          console.error('[LMS Shell] Blob URL injection failed');
+          showError('All execution strategies failed. Try enabling CSP bypass in Tampermonkey settings.');
+        };
+        (document.head || document.documentElement).appendChild(script);
+        return;
+      } catch (blobErr) {
+        console.error('[LMS Shell] Blob URL failed:', blobErr.message);
+      }
+
+      showError('Could not execute core.js. Enable CSP bypass in Tampermonkey: Settings > Security > Content Security Policy bypass.');
     } catch (e) {
       console.error('[LMS Shell] Failed to load core:', e);
 
-      // Check if it's an auth error
       if (e.message.includes('token') || e.message.includes('401') || e.message.includes('403')) {
         clearPat();
+        showError('Authentication failed. Refresh to re-enter token.');
+      } else {
+        showError(e.message);
+      }
+    }
+  }
         showError('Authentication failed. Please refresh to re-enter your token.');
       } else {
         showError(e.message);
@@ -379,7 +486,7 @@
    * Main entry point. Checks auth, loads core.
    */
   async function init() {
-    // Register menu command for token management
+    // Register menu command for token management (always available)
     if (typeof GM_registerMenuCommand === 'function') {
       GM_registerMenuCommand('Manage GitHub Token', async () => {
         const current = getPat();
@@ -410,7 +517,20 @@
       });
     }
 
-    // Check for stored PAT
+    // Step 1: Fetch public manifest to check LMS patterns (no auth needed)
+    console.log('[LMS Shell] Checking if this is an LMS page...');
+    const manifest = await fetchPublicManifest();
+
+    if (!manifest) {
+      console.log('[LMS Shell] Could not fetch manifest, trying to load core anyway...');
+    } else if (!isOnLMSPage(manifest)) {
+      console.log('[LMS Shell] Not an LMS page, staying dormant');
+      return;
+    } else {
+      console.log('[LMS Shell] LMS page detected, loading core...');
+    }
+
+    // Step 2: Check for stored PAT
     const pat = getPat();
     if (!pat) {
       console.log('[LMS Shell] No PAT found, showing prompt');
@@ -421,7 +541,7 @@
       }
     }
 
-    // Load core from private repo
+    // Step 3: Load core from private repo
     await loadCore();
   }
 
