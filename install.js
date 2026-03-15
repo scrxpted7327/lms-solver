@@ -1,24 +1,26 @@
 // ==UserScript==
 // @name         LMS AI Solver
-// @version      2.0.13
-// @description  AI-powered solver for Mobius, Smartwork5, Canvas, and other LMS platforms
 // @namespace    http://tampermonkey.net/
+// @version      2.0.17
+// @description  AI-powered solver for LMS platforms (Mobius, Smartwork5, Canvas)
 // @author       scrxpted7327
-// @match        *://*/*
-// @grant        GM_xmlhttpRequest
-// @grant        GM_setValue
+// @match        *://*.mobius.cloud/*
+// @match        *://*.mobiusplatform.org/*
+// @match        *://*.wwnorton.com/smartwork5/*
+// @match        *://*.instructure.com/*
+// @grant        GM_addStyle
 // @grant        GM_getValue
+// @grant        GM_setValue
 // @grant        GM_registerMenuCommand
-// @grant        GM_addElement
+// @grant        GM_xmlhttpRequest
+// @grant        GM_info
 // @grant        unsafeWindow
+// @connect      github.com
 // @connect      api.github.com
 // @connect      raw.githubusercontent.com
-// @connect      localhost
-// @run-at       document-idle
-// @homepage     https://github.com/scrxpted7327/lms-solver
-// @supportURL   https://github.com/scrxpted7327/lms-solver/issues
-// @updateURL    https://raw.githubusercontent.com/scrxpted7327/lms-solver/refs/heads/main/version.txt
-// @downloadURL  https://raw.githubusercontent.com/scrxpted7327/lms-solver/refs/heads/main/install.js
+// @connect      usask.mobius.cloud
+// @connect      *.wwnorton.com
+// @connect      *.instructure.com
 // ==/UserScript==
 
 /**
