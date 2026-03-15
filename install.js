@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         LMS AI Solver
-// @version      2.0.2
+// @version      2.0.3
 // @description  AI-powered solver for Mobius, Smartwork5, Canvas, and other LMS platforms
 // @namespace    http://tampermonkey.net/
 // @author       scrxpted7327
