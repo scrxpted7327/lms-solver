@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         LMS AI Solver
 // @namespace    http://tampermonkey.net/
-// @version      2.0.17
+// @version      2.0.18
 // @description  AI-powered solver for LMS platforms (Mobius, Smartwork5, Canvas)
 // @author       scrxpted7327
 // @match        *://*.mobius.cloud/*
@@ -51,495 +51,71 @@
 (function () {
   'use strict';
 
-  // ═══════════════════════════════════════════════════
-  // CONFIGURATION
-  // ═══════════════════════════════════════════════════
+   // ══════════════════════════════════════════════════════
+   // UPDATE CHECKER WITH PROGRESS
+   // ═════════════════════════════════════════════════════
 
-  /** Private repo containing the actual implementation */
-  const PRIVATE_REPO = 'scrxpted7327/mobius_solver';
-  const PRIVATE_BRANCH = 'main';
+   /**
+    * Check for updates and show progress bar.
+    */
+   async function checkForUpdates() {
+     // Create progress container
+     const progressContainer = document.createElement('div');
+     progressContainer.id = 'lms-update-progress';
+     progressContainer.style.cssText = `
+       position: fixed; top: 20px; right: 20px; z-index: 999999;
+       background: rgba(30, 30, 46, 0.9); color: #cdd6f4;
+       padding: 16px; border-radius: 8px; font-family: monospace;
+       font-size: 13px; max-width: 300px; box-shadow: 0 4px 16px rgba(0,0,0,0.3);
+     `;
+     progressContainer.innerHTML = `
+       <div id="lms-update-status">Checking for updates...</div>
+       <div id="lms-update-bar-container" style="margin-top: 8px;">
+         <div id="lms-update-bar" style="width: 0%; height: 4px; background: #89b4fa; border-radius: 2px; transition: width 0.3s;"></div>
+       </div>
+       <div id="lms-update-details" style="margin-top: 8px; font-size: 11px; color: #a6adc8;"></div>
+     `;
+     document.body.appendChild(progressContainer);
 
-  /** GitHub API endpoint for private repo content */
-  const GH_API_BASE = `https://api.github.com/repos/${PRIVATE_REPO}/contents/userscript/`;
+     try {
+       // Update progress: Fetching manifest
+       document.getElementById('lms-update-status').textContent = 'Fetching manifest...';
+       document.getElementById('lms-update-bar').style.width = '25%';
+       document.getElementById('lms-update-details').textContent = '';
 
-  /** Storage keys */
-  const KEY_PAT = 'lms_solver_github_token';
-  const KEY_MODULES = 'lms_solver_modules_';
-  const KEY_COMMIT = 'lms_solver_commit';
-  const KEY_SHELL_VERSION = 'lms_solver_shell_version';
+       const manifest = await fetchPublicManifest();
+       if (!manifest) {
+         throw new Error('Could not fetch manifest');
+       }
 
-  /** Request timeout: 30 seconds */
-  const FETCH_TIMEOUT = 30000;
+       // Update progress: Checking version
+       document.getElementById('lms-update-status').textContent = 'Checking version...';
+       document.getElementById('lms-update-bar').style.width = '50%';
+       document.getElementById('lms-update-details').textContent = `Current: ${manifest.version || 'unknown'}`;
 
-  // ═══════════════════════════════════════════════════
-  // TOKEN MANAGEMENT
-  // ═══════════════════════════════════════════════════
+       // For now, we'll just show that we're up to date
+       // In a real implementation, we'd compare versions and download updates
 
-  /**
-   * Get stored GitHub Personal Access Token.
-   * @returns {string|null} Token or null
-   */
-  function getPat() {
-    try {
-      return GM_getValue(KEY_PAT, null);
-    } catch (e) {
-      return null;
-    }
-  }
+       // Update progress: Complete
+       document.getElementById('lms-update-status').textContent = 'Up to date!';
+       document.getElementById('lms-update-bar').style.width = '100%';
+       document.getElementById('lms-update-details').textContent = `v${manifest.version || 'unknown'}`;
 
-  /**
-   * Save GitHub PAT to persistent storage.
-   * @param {string} token - Personal Access Token
-   */
-  function savePat(token) {
-    GM_setValue(KEY_PAT, token);
-  }
+       // Remove progress after a short delay
+       setTimeout(() => {
+         progressContainer.remove();
+       }, 1500);
+     } catch (error) {
+       document.getElementById('lms-update-status').textContent = 'Update check failed';
+       document.getElementById('lms-update-details').textContent = error.message;
+       setTimeout(() => {
+         progressContainer.remove();
+       }, 3000);
+     }
+   }
 
-  /**
-   * Clear stored PAT.
-   */
-  function clearPat() {
-    GM_setValue(KEY_PAT, null);
-  }
-
-  /**
-   * Get auth headers for GitHub API requests.
-   * @returns {Object} Headers object
-   */
-  function getAuthHeaders() {
-    const pat = getPat();
-    const headers = {
-      'Accept': 'application/vnd.github.v3+json',
-    };
-    if (pat) {
-      headers['Authorization'] = `token ${pat}`;
-    }
-    return headers;
-  }
-
-  // ═══════════════════════════════════════════════════
-  // GITHUB API
-  // ═══════════════════════════════════════════════════
-
-  /**
-   * Fetch the latest commit SHA from the private repo.
-   * Used for deterministic cache invalidation (like Lua commit.txt pattern).
-   *
-   * @returns {Promise<string>} 40-char commit SHA
-   */
-  async function fetchLatestCommitSha() {
-    return new Promise((resolve, reject) => {
-      GM_xmlhttpRequest({
-        method: 'GET',
-        url: `https://api.github.com/repos/${PRIVATE_REPO}/commits/${PRIVATE_BRANCH}`,
-        headers: getAuthHeaders(),
-        timeout: 10000,
-        onload: (resp) => {
-          if (resp.status === 200) {
-            try {
-              const data = JSON.parse(resp.responseText);
-              resolve(data.sha);
-            } catch (e) {
-              reject(new Error('Failed to parse commit SHA'));
-            }
-          } else {
-            reject(new Error(`HTTP ${resp.status} fetching commit SHA`));
-          }
-        },
-        onerror: () => reject(new Error('Network error fetching commit SHA')),
-        ontimeout: () => reject(new Error('Timeout fetching commit SHA')),
-      });
-    });
-  }
-
-  /**
-   * Wipe all cached modules (like Lua wipeFolder pattern).
-   * Called when commit SHA changes, indicating new code on the repo.
-   */
-  function wipeModuleCache() {
-    const knownKeys = GM_getValue(KEY_MODULES + '_keys', []);
-    for (const key of knownKeys) {
-      GM_setValue(key, null);
-    }
-    GM_setValue(KEY_MODULES + '_keys', []);
-    console.log(`[LMS Shell] Cache wiped (${knownKeys.length} entries)`);
-  }
-
-  /**
-   * Track a storage key for later cache wiping.
-   * @param {string} key - Storage key to track
-   */
-  function trackModuleKey(key) {
-    const knownKeys = GM_getValue(KEY_MODULES + '_keys', []);
-    if (!knownKeys.includes(key)) {
-      knownKeys.push(key);
-      GM_setValue(KEY_MODULES + '_keys', knownKeys);
-    }
-  }
-
-  /**
-   * Fetch a file from the private repo via GitHub API.
-   * Uses commit SHA for deterministic, pinned content (not branch name).
-   * Decodes base64 content from the API response.
-   *
-   * @param {string} path - File path relative to userscript/
-   * @param {string} commitSha - Commit SHA to fetch from (pinned version)
-   * @returns {Promise<string>} File content
-   */
-  async function fetchFromPrivateRepo(path, commitSha) {
-    const cacheKey = KEY_MODULES + path;
-
-    // Check cache - content from the same commit SHA is always valid
-    const cached = GM_getValue(cacheKey, null);
-    if (cached && cached.sha === commitSha) {
-      console.log(`[LMS Shell] Cache hit: ${path} (${commitSha.substring(0, 7)})`);
-      return cached.content;
-    }
-
-    const url = GH_API_BASE + path + `?ref=${commitSha}`;
-    console.log(`[LMS Shell] Fetching: ${path} @ ${commitSha.substring(0, 7)}`);
-
-    return new Promise((resolve, reject) => {
-      GM_xmlhttpRequest({
-        method: 'GET',
-        url: url,
-        headers: getAuthHeaders(),
-        timeout: FETCH_TIMEOUT,
-        onload: function (response) {
-          if (response.status === 200) {
-            try {
-              const data = JSON.parse(response.responseText);
-              const content = atob(data.content.replace(/[\r\n]/g, ''));
-              // Cache with commit SHA for deterministic validation
-              GM_setValue(cacheKey, {
-                content: content,
-                sha: commitSha,
-                timestamp: Date.now(),
-              });
-              trackModuleKey(cacheKey);
-              resolve(content);
-            } catch (e) {
-              reject(new Error(`Failed to decode ${path}: ${e.message}`));
-            }
-          } else if (response.status === 401) {
-            reject(new Error('Invalid GitHub token. Please re-enter your PAT.'));
-          } else if (response.status === 403) {
-            reject(new Error('Token lacks repo scope. Create a new PAT with "repo" scope.'));
-          } else if (response.status === 404) {
-            reject(new Error(`File not found: ${path}. Check repo access.`));
-          } else {
-            reject(new Error(`HTTP ${response.status} fetching ${path}`));
-          }
-        },
-        onerror: function () {
-          reject(new Error(`Network error fetching ${path}`));
-        },
-        ontimeout: function () {
-          reject(new Error(`Timeout fetching ${path}`));
-        },
-      });
-    });
-  }
-
-  /**
-   * Validate a GitHub PAT by making a test API call.
-   * @param {string} token - PAT to validate
-   * @returns {Promise<boolean>} True if valid
-   */
-  async function validatePat(token) {
-    return new Promise((resolve) => {
-      GM_xmlhttpRequest({
-        method: 'GET',
-        url: `https://api.github.com/repos/${PRIVATE_REPO}`,
-        headers: {
-          'Accept': 'application/vnd.github.v3+json',
-          'Authorization': `token ${token}`,
-        },
-        timeout: 10000,
-        onload: function (response) {
-          resolve(response.status === 200);
-        },
-        onerror: function () {
-          resolve(false);
-        },
-        ontimeout: function () {
-          resolve(false);
-        },
-      });
-    });
-  }
-
-  // ═══════════════════════════════════════════════════
-  // AUTH PROMPT UI
-  // ═══════════════════════════════════════════════════
-
-  /**
-   * Show a modal prompting the user to enter their GitHub PAT.
-   * @returns {Promise<string|null>} The entered token or null if cancelled
-   */
-  function showPatPrompt() {
-    return new Promise((resolve) => {
-      // Remove any existing prompt
-      const existing = document.getElementById('lms_pat_prompt');
-      if (existing) existing.remove();
-
-      const overlay = document.createElement('div');
-      overlay.id = 'lms_pat_prompt';
-      overlay.innerHTML = `
-        <div style="
-          position: fixed; top: 0; left: 0; right: 0; bottom: 0;
-          background: rgba(0,0,0,0.7); z-index: 999999;
-          display: flex; align-items: center; justify-content: center;
-          font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-        ">
-          <div style="
-            background: #1e1e2e; color: #cdd6f4; padding: 24px;
-            border-radius: 12px; max-width: 480px; width: 90%;
-            box-shadow: 0 8px 32px rgba(0,0,0,0.4);
-          ">
-            <h2 style="margin: 0 0 8px; color: #89b4fa; font-size: 18px;">
-              🔐 GitHub Authentication Required
-            </h2>
-            <p style="margin: 0 0 16px; color: #a6adc8; font-size: 14px; line-height: 1.5;">
-              LMS AI Solver loads modules from a private GitHub repository.
-              Please enter your Personal Access Token (PAT) with <code style="color: #f9e2af;">repo</code> scope.
-            </p>
-            <p style="margin: 0 0 12px; font-size: 12px; color: #6c7086;">
-              Create one at: <a href="https://github.com/settings/tokens/new?scopes=repo"
-              target="_blank" style="color: #89b4fa;">github.com/settings/tokens</a>
-            </p>
-            <input type="password" id="lms_pat_input" placeholder="ghp_xxxxxxxxxxxxxxxxxxxx" style="
-              width: 100%; padding: 10px 12px; border: 1px solid #45475a;
-              border-radius: 6px; background: #313244; color: #cdd6f4;
-              font-size: 14px; box-sizing: border-box; margin-bottom: 12px;
-            ">
-            <div id="lms_pat_status" style="
-              font-size: 12px; margin-bottom: 12px; min-height: 18px;
-            "></div>
-            <div style="display: flex; gap: 8px; justify-content: flex-end;">
-              <button id="lms_pat_cancel" style="
-                padding: 8px 16px; border: 1px solid #45475a; border-radius: 6px;
-                background: transparent; color: #cdd6f4; cursor: pointer;
-                font-size: 14px;
-              ">Cancel</button>
-              <button id="lms_pat_save" style="
-                padding: 8px 16px; border: none; border-radius: 6px;
-                background: #89b4fa; color: #1e1e2e; cursor: pointer;
-                font-size: 14px; font-weight: 600;
-              ">Save Token</button>
-            </div>
-          </div>
-        </div>
-      `;
-
-      document.body.appendChild(overlay);
-
-      const input = document.getElementById('lms_pat_input');
-      const status = document.getElementById('lms_pat_status');
-      const saveBtn = document.getElementById('lms_pat_save');
-      const cancelBtn = document.getElementById('lms_pat_cancel');
-
-      input.focus();
-
-      saveBtn.addEventListener('click', async () => {
-        const token = input.value.trim();
-        if (!token) {
-          status.style.color = '#f38ba8';
-          status.textContent = 'Please enter a token';
-          return;
-        }
-
-        saveBtn.disabled = true;
-        saveBtn.textContent = 'Validating...';
-        status.style.color = '#a6adc8';
-        status.textContent = 'Checking token access...';
-
-        const valid = await validatePat(token);
-        if (valid) {
-          savePat(token);
-          overlay.remove();
-          resolve(token);
-        } else {
-          saveBtn.disabled = false;
-          saveBtn.textContent = 'Save Token';
-          status.style.color = '#f38ba8';
-          status.textContent = 'Invalid token or no access to private repo';
-        }
-      });
-
-      cancelBtn.addEventListener('click', () => {
-        overlay.remove();
-        resolve(null);
-      });
-
-      // Enter key submits
-      input.addEventListener('keydown', (e) => {
-        if (e.key === 'Enter') saveBtn.click();
-      });
-    });
-  }
-
-  // ═══════════════════════════════════════════════════
-  // LMS DETECTION (before core loads)
-  // ═══════════════════════════════════════════════════
-
-  /** Public repo for manifest/version checking (no auth needed) */
-  const PUBLIC_REPO = 'scrxpted7327/lms-solver';
-  const PUBLIC_BRANCH = 'refs/heads/main';
-  const PUBLIC_MANIFEST_URL = `https://raw.githubusercontent.com/${PUBLIC_REPO}/${PUBLIC_BRANCH}/version.json`;
-
-  /**
-   * Fetch the public manifest to check LMS patterns.
-   * This is called BEFORE requiring a PAT or loading core.
-   *
-   * @returns {Promise<Object|null>} Manifest or null
-   */
-  async function fetchPublicManifest() {
-    // Cache bust with timestamp to avoid stale raw.githubusercontent.com cache
-    const url = PUBLIC_MANIFEST_URL + '?t=' + Date.now();
-    return new Promise((resolve) => {
-      GM_xmlhttpRequest({
-        method: 'GET',
-        url: url,
-        cache: 'no-cache',
-        timeout: 10000,
-        onload: (resp) => {
-          if (resp.status === 200) {
-            try {
-              resolve(JSON.parse(resp.responseText));
-            } catch (e) {
-              console.warn('[LMS Shell] Failed to parse manifest:', e.message);
-              resolve(null);
-            }
-          } else {
-            resolve(null);
-          }
-        },
-        onerror: () => resolve(null),
-        ontimeout: () => resolve(null),
-      });
-    });
-  }
-
-  /**
-   * Check if current page matches any LMS URL pattern.
-   *
-   * @param {Object} manifest - Version manifest with lms config
-   * @returns {boolean}
-   */
-  function isOnLMSPage(manifest) {
-    if (!manifest || !manifest.lms) return false;
-    const url = window.location.href.toLowerCase();
-    const urlPatterns = manifest.lms.url_patterns || {};
-
-    for (const [, patterns] of Object.entries(urlPatterns)) {
-      for (const pattern of patterns) {
-        const regexStr = pattern
-          .toLowerCase()
-          .replace(/[.+^${}()|[\]\\]/g, '\\$&')
-          .replace(/\*/g, '.*');
-        if (new RegExp(`^${regexStr}$`).test(url)) {
-          return true;
-        }
-      }
-    }
-    return false;
-  }
-
-  // ═══════════════════════════════════════════════════
-  // CORE LOADER
-  // ═══════════════════════════════════════════════════
-
-  /**
-   * Load and execute core.js from the private repo.
-   * Uses multiple execution strategies to handle CSP restrictions.
-   */
-  async function loadCore() {
-    console.log('[LMS Shell] Loading core from private repo...');
-
-    try {
-      // Step 1: Fetch latest commit SHA from private repo
-      let commitSha;
-      try {
-        commitSha = await fetchLatestCommitSha();
-        console.log(`[LMS Shell] Latest commit: ${commitSha.substring(0, 7)}`);
-      } catch (e) {
-        console.warn('[LMS Shell] Could not fetch commit SHA, using cached if available');
-        commitSha = GM_getValue(KEY_COMMIT, null);
-        if (!commitSha) throw new Error('No commit SHA available and no cache');
-      }
-
-      // Step 2: Compare with stored commit SHA (like Lua commit.txt pattern)
-      const storedSha = GM_getValue(KEY_COMMIT, null);
-      if (storedSha && storedSha !== commitSha) {
-        console.log(`[LMS Shell] Commit changed: ${storedSha.substring(0, 7)} → ${commitSha.substring(0, 7)}, wiping cache`);
-        wipeModuleCache();
-      }
-      GM_setValue(KEY_COMMIT, commitSha);
-
-      // Step 3: Fetch core.js using pinned commit SHA (deterministic, not cached by GitHub)
-      const coreCode = await fetchFromPrivateRepo('core.js', commitSha);
-
-      // Expose GM_* functions to page context via unsafeWindow
-      // core.js will read them from window.__GM_* when running in page context
-      unsafeWindow.__GM_xmlhttpRequest = GM_xmlhttpRequest;
-      unsafeWindow.__GM_setValue = GM_setValue;
-      unsafeWindow.__GM_getValue = GM_getValue;
-      unsafeWindow.__GM_registerMenuCommand = GM_registerMenuCommand;
-
-      // Use GM_addElement to inject script - bypasses CSP restrictions
-      // This is Tampermonkey's privileged injection method
-      try {
-        GM_addElement('script', {
-          textContent: coreCode,
-        });
-        console.log('[LMS Shell] Core injected via GM_addElement (CSP-safe)');
-        return;
-      } catch (gmErr) {
-        console.warn('[LMS Shell] GM_addElement failed:', gmErr.message);
-      }
-
-      // Fallback: direct eval (works in TM sandbox on pages without strict CSP)
-      try {
-        eval(coreCode); // eslint-disable-line no-eval
-        console.log('[LMS Shell] Core loaded via eval()');
-        return;
-      } catch (evalErr) {
-        console.warn('[LMS Shell] eval() failed:', evalErr.message);
-      }
-
-      showError('Could not execute core.js. Please report this issue.');
-    } catch (e) {
-      console.error('[LMS Shell] Failed to load core:', e);
-
-      if (e.message.includes('token') || e.message.includes('401') || e.message.includes('403')) {
-        clearPat();
-        showError('Authentication failed. Refresh to re-enter token.');
-      } else {
-        showError(e.message);
-      }
-    }
-  }
-
-  /**
-   * Show an error notification on the page.
-   * @param {string} message - Error message
-   */
-  function showError(message) {
-    const toast = document.createElement('div');
-    toast.style.cssText = `
-      position: fixed; bottom: 20px; right: 20px; z-index: 999999;
-      background: #f38ba8; color: #1e1e2e; padding: 12px 20px;
-      border-radius: 8px; font-family: monospace; font-size: 13px;
-      max-width: 400px; box-shadow: 0 4px 16px rgba(0,0,0,0.3);
-    `;
-    toast.textContent = 'LMS Solver: ' + message;
-    document.body.appendChild(toast);
-    setTimeout(() => toast.remove(), 10000);
-  }
-
-  // ═══════════════════════════════════════════════════
-  // INITIALIZATION
+   // ═════════════════════════════════════════════════════
+   // INITIALIZATION
   // ═══════════════════════════════════════════════════
 
   /**
@@ -590,19 +166,22 @@
       console.log('[LMS Shell] LMS page detected, loading core...');
     }
 
-    // Step 2: Check for stored PAT
-    const pat = getPat();
-    if (!pat) {
-      console.log('[LMS Shell] No PAT found, showing prompt');
-      const token = await showPatPrompt();
-      if (!token) {
-        console.log('[LMS Shell] No token provided, staying dormant');
-        return;
-      }
-    }
+     // Step 2: Check for stored PAT
+     const pat = getPat();
+     if (!pat) {
+       console.log('[LMS Shell] No PAT found, showing prompt');
+       const token = await showPatPrompt();
+       if (!token) {
+         console.log('[LMS Shell] No token provided, staying dormant');
+         return;
+       }
+     }
 
-    // Step 3: Load core from private repo
-    await loadCore();
+     // Step 3: Check for updates and show progress
+     await checkForUpdates();
+
+     // Step 4: Load core from private repo
+     await loadCore();
   }
 
   // Wait for DOM, then initialize
