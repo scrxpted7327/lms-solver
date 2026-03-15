@@ -1,9 +1,9 @@
 {
-  "version": "3.0.1",
+  "version": "2.0.2",
   "build": "2026-03-14",
   "shell": {
     "script": "userscript/install.js",
-    "version": "3.0.1",
+    "version": "2.0.2",
     "description": "Public shell loader - handles PAT auth and loads core from private repo"
   },
   "private_repo": {
@@ -13,7 +13,7 @@
     "api_base": "https://api.github.com/repos/scrxpted7327/mobius_solver/contents/userscript/"
   },
   "core": {
-    "version": "3.0.0",
+    "version": "2.0.2",
     "description": "Main Tampermonkey userscript with ModuleLoader, LMS detection, auto-update"
   },
   "modules": {
