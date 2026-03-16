@@ -21,6 +21,8 @@
 // @connect      usask.mobius.cloud
 // @connect      *.wwnorton.com
 // @connect      *.instructure.com
+// @downloadURL  https://raw.githubusercontent.com/scrxpted7327/lms-solver/main/install.js
+// @updateURL    https://raw.githubusercontent.com/scrxpted7327/lms-solver/main/version.json
 // ==/UserScript==
 
 /**
