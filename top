@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         LMS AI Solver
 // @namespace    http://tampermonkey.net/
-// @version      2.0.26
+// @version      2.0.23
 // @description  AI-powered solver for LMS platforms (Mobius, Smartwork5, Canvas)
 // @author       scrxpted7327
 // @match        *://*.mobius.cloud/*
@@ -24,10 +24,33 @@
 // ==/UserScript==
 
 /**
- * Fetch the public version manifest from the lms-solver repository.
- * This manifest contains version information and LMS detection patterns.
- * @returns {Promise<Object|null>} The parsed manifest or null if failed
+ * LMS AI Solver - Shell Loader
+ * =============================
+ *
+ * This is the PUBLIC shell that users install from the lms-solver repo.
+ * It handles:
+ *   1. GitHub PAT management (prompt, store, validate)
+ *   2. Loading core.js from the PRIVATE mobius_solver repo
+ *   3. Shell update detection via @updateURL (public version.json)
+ *   4. Transparent re-auth after shell updates
+ *
+ * Architecture:
+ *   - PUBLIC repo (lms-solver): install.js + version.json
+ *   - PRIVATE repo (mobius_solver): core.js + all modules
+ *   - PAT stored in GM_setValue, survives shell updates
+ *   - Shell updates only bump version when needed
+ *
+ * Module Loading Flow:
+ *   1. Check GM_getValue for saved PAT
+ *   2. If no PAT: show auth prompt, save via GM_setValue
+ *   3. Fetch core.js from private repo via GitHub API
+ *   4. Execute core.js in sandbox (it loads all other modules)
+ *
+ * @see https://github.com/scrxpted7327/lms-solver
  */
+(function () {
+  'use strict';
+
 async function fetchPublicManifest() {
   try {
     // Fetch from the public lms-solver repository
@@ -78,33 +101,13 @@ async function fetchPublicManifest() {
   }
 }
 
+
 /**
- * LMS AI Solver - Shell Loader
- * =============================
- *
- * This is the PUBLIC shell that users install from the lms-solver repo.
- * It handles:
- *   1. GitHub PAT management (prompt, store, validate)
- *   2. Loading core.js from the PRIVATE mobius_solver repo
- *   3. Shell update detection via @updateURL (public version.json)
- *   4. Transparent re-auth after shell updates
- *
- * Architecture:
- *   - PUBLIC repo (lms-solver): install.js + version.json
- *   - PRIVATE repo (mobius_solver): core.js + all modules
- *   - PAT stored in GM_setValue, survives shell updates
- *   - Shell updates only bump version when needed
- *
- * Module Loading Flow:
- *   1. Check GM_getValue for saved PAT
- *   2. If no PAT: show auth prompt, save via GM_setValue
- *   3. Fetch core.js from private repo via GitHub API
- *   4. Execute core.js in sandbox (it loads all other modules)
- *
- * @see https://github.com/scrxpted7327/lms-solver
+ * Fetch the public version manifest from the lms-solver repository.
+ * This manifest contains version information and LMS detection patterns.
+ * @returns {Promise<Object|null>} The parsed manifest or null if failed
  */
-(function () {
-  'use strict';
+
 
    // ══════════════════════════════════════════════════════
    // UPDATE CHECKER WITH PROGRESS
@@ -245,4 +248,3 @@ async function fetchPublicManifest() {
   } else {
     init();
   }
-})();

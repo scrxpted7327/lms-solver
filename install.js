@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         LMS AI Solver
 // @namespace    http://tampermonkey.net/
-// @version      2.0.26
+// @version      2.0.27
 // @description  AI-powered solver for LMS platforms (Mobius, Smartwork5, Canvas)
 // @author       scrxpted7327
 // @match        *://*.mobius.cloud/*
@@ -104,7 +104,45 @@ async function fetchPublicManifest() {
  * @see https://github.com/scrxpted7327/lms-solver
  */
 (function () {
-  'use strict';
+   'use strict';
+    /**
+     * Helper to match a URL against a pattern (string or regex).
+     * @param {string} url - The URL to test
+     * @param {string|RegExp} pattern - The pattern to match against
+     * @returns {boolean} True if the URL matches the pattern
+     */
+    function _matchUrlPattern(url, pattern) {
+      if (pattern instanceof RegExp) {
+        return pattern.test(url);
+      }
+      if (typeof pattern === 'string') {
+        // If it looks like a regex pattern (e.g., /^https?:\/\/.*/)
+        if (pattern.startsWith('/') && pattern.endsWith('/')) {
+          try {
+            return new RegExp(pattern.slice(1, -1)).test(url);
+          } catch (e) {
+            console.warn('[LMS Solver] Invalid regex pattern in manifest:', pattern);
+            return false;
+          }
+        }
+        // Otherwise, substring match
+        return url.includes(pattern);
+      }
+      return false;
+    }
+
+    /**
+     * Determine if the current URL matches any of the LMS patterns in the manifest.
+     * @param {Object} manifest - The public manifest containing patterns
+     * @returns {boolean} True if on an LMS page, false otherwise
+     */
+    function isOnLMSPage(manifest) {
+      if (!manifest || !manifest.patterns || !Array.isArray(manifest.patterns)) {
+        // If no patterns, we assume we are on an LMS page to avoid breaking existing functionality.
+        return true;
+      }
+      return manifest.patterns.some(pattern => _matchUrlPattern(window.location.href, pattern));
+    }
 
    // ══════════════════════════════════════════════════════
    // UPDATE CHECKER WITH PROGRESS
