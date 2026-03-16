@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         LMS AI Solver
 // @namespace    http://tampermonkey.net/
-// @version      2.0.26
+// @version      2.0.29
 // @description  AI-powered solver for LMS platforms (Mobius, Smartwork5, Canvas)
 // @author       scrxpted7327
 // @match        *://*.mobius.cloud/*
@@ -104,16 +104,183 @@ async function fetchPublicManifest() {
  * @see https://github.com/scrxpted7327/lms-solver
  */
 (function () {
-  'use strict';
+   'use strict';
+    /**
+     * Helper to match a URL against a pattern (string or regex).
+     * @param {string} url - The URL to test
+     * @param {string|RegExp} pattern - The pattern to match against
+     * @returns {boolean} True if the URL matches the pattern
+     */
+    function _matchUrlPattern(url, pattern) {
+      if (pattern instanceof RegExp) {
+        return pattern.test(url);
+      }
+      if (typeof pattern === 'string') {
+        // If it looks like a regex pattern (e.g., /^https?:\/\/.*/)
+        if (pattern.startsWith('/') && pattern.endsWith('/')) {
+          try {
+            return new RegExp(pattern.slice(1, -1)).test(url);
+          } catch (e) {
+            console.warn('[LMS Solver] Invalid regex pattern in manifest:', pattern);
+            return false;
+          }
+        }
+        // Otherwise, substring match
+        return url.includes(pattern);
+      }
+      return false;
+    }
 
-   // ══════════════════════════════════════════════════════
-   // UPDATE CHECKER WITH PROGRESS
-   // ═════════════════════════════════════════════════════
+    /**
+     * Determine if the current URL matches any of the LMS patterns in the manifest.
+     * @param {Object} manifest - The public manifest containing patterns
+     * @returns {boolean} True if on an LMS page, false otherwise
+     */
+    function isOnLMSPage(manifest) {
+      if (!manifest || !manifest.patterns || !Array.isArray(manifest.patterns)) {
+        // If no patterns, we assume we are on an LMS page to avoid breaking existing functionality.
+        return true;
+      }
+      return manifest.patterns.some(pattern => _matchUrlPattern(window.location.href, pattern));
+    }
 
-   /**
-    * Check for updates and show progress bar.
-    */
-   async function checkForUpdates() {
+    // ═══════════════════════════════════════════════════════
+    // PAT MANAGEMENT
+    // ═══════════════════════════════════════════════════════
+
+    /**
+     * Get the stored GitHub PAT.
+     * @returns {string|null} The PAT or null if not set
+     */
+    function getPat() {
+      return GM_getValue('github_pat', null);
+    }
+
+    /**
+     * Save the GitHub PAT.
+     * @param {string} pat - The PAT to save
+     */
+    function savePat(pat) {
+      GM_setValue('github_pat', pat);
+    }
+
+    /**
+     * Clear the stored GitHub PAT.
+     */
+    function clearPat() {
+      GM_deleteValue('github_pat');
+    }
+
+    /**
+     * Show a prompt to enter a GitHub PAT.
+     * @returns {string|null} The entered PAT or null if cancelled
+     */
+    function showPatPrompt() {
+      return prompt('Enter your GitHub Personal Access Token (PAT):', '');
+    }
+
+    /**
+     * Validate a GitHub PAT by making a request to the GitHub API.
+     * @param {string} pat - The PAT to validate
+     * @returns {Promise<boolean>} True if valid, false otherwise
+     */
+    async function validatePat(pat) {
+      try {
+        const response = await new Promise((resolve, reject) => {
+          GM_xmlhttpRequest({
+            method: 'GET',
+            url: 'https://api.github.com/user',
+            headers: {
+              'Authorization': `token ${pat}`
+            },
+            responseType: 'text',
+            timeout: 5000,
+            onload: (res) => {
+              if (res.status === 200) {
+                resolve(true);
+              } else {
+                resolve(false);
+              }
+            },
+            onerror: () => {
+              resolve(false);
+            },
+            ontimeout: () => {
+              resolve(false);
+            }
+          });
+        });
+        return response;
+      } catch (error) {
+        console.error('[LMS Solver] Error validating PAT:', error);
+        return false;
+      }
+    }
+
+    // ═══════════════════════════════════════════════════════
+    // LOAD CORE FROM PRIVATE REPO
+    // ═══════════════════════════════════════════════════════
+
+    /**
+     * Load the core.js from the private mobius_solver repository.
+     * @returns {Promise<void>}
+     */
+    async function loadCore() {
+      try {
+        const url = 'https://api.github.com/repos/scrxpted7327/mobius_solver/contents/userscript/core.js';
+        
+        // Get PAT for authentication if available
+        const pat = getPat();
+        const headers = {};
+        if (pat) {
+          headers['Authorization'] = `token ${pat}`;
+        }
+
+        const response = await new Promise((resolve, reject) => {
+          GM_xmlhttpRequest({
+            method: 'GET',
+            url: url,
+            headers: headers,
+            responseType: 'text',
+            timeout: 10000,
+            onload: (resp) => {
+              if (resp.status >= 200 && resp.status < 300) {
+                resolve(resp);
+              } else {
+                reject(new Error('Failed to fetch core.js: ' + resp.status));
+              }
+            },
+            onerror: () => reject(new Error('Network error fetching core.js')),
+            ontimeout: () => reject(new Error('Timeout fetching core.js'))
+          });
+        });
+
+        const data = JSON.parse(response.responseText);
+        let code;
+        if (data.encoding === 'base64' && data.content) {
+          code = atob(data.content.replace(/\n/g, ''));
+        } else if (data.content) {
+          code = data.content;
+        } else {
+          throw new Error('No content in core.js response');
+        }
+
+        // Execute the core.js code in the current scope
+        eval(code);
+      } catch (error) {
+        console.error('[LMS Solver] Failed to load core.js:', error);
+        throw error;
+      }
+    }
+
+    // ═══════════════════════════════════════════════════════
+    // UPDATE CHECKER WITH PROGRESS
+    // ═══════════════════════════════════════════════════════
+
+    /**
+     * Check for updates and show progress bar.
+     */
+    async function checkForUpdates() {
      // Create progress container
      const progressContainer = document.createElement('div');
      progressContainer.id = 'lms-update-progress';
@@ -222,7 +389,7 @@ async function fetchPublicManifest() {
     }
 
      // Step 2: Check for stored PAT
-     const pat = getPat();
+     let pat = getPat();
      if (!pat) {
        console.log('[LMS Shell] No PAT found, showing prompt');
        const token = await showPatPrompt();
@@ -230,6 +397,8 @@ async function fetchPublicManifest() {
          console.log('[LMS Shell] No token provided, staying dormant');
          return;
        }
+       savePat(token);
+       pat = token;
      }
 
      // Step 3: Check for updates and show progress
