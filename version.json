@@ -1,9 +1,9 @@
 {
-  "version": "2.0.31",
+  "version": "2.0.32",
   "build": "2026-03-16",
   "shell": {
     "script": "userscript/install.js",
-    "version": "2.0.31",
+    "version": "2.0.32",
     "description": "Public shell loader - handles PAT auth and loads core from private repo"
   },
   "private_repo": {
@@ -12,10 +12,10 @@
     "branch": "main",
     "api_base": "https://api.github.com/repos/scrxpted7327/mobius_solver/contents/userscript/"
   },
-    "core": {
-   "version": "2.0.31",
-        "description": "Main Tampermonkey userscript with ModuleLoader, LMS detection, auto-update"
-      },
+  "core": {
+    "version": "2.0.32",
+    "description": "Main Tampermonkey userscript with ModuleLoader, LMS detection, auto-update"
+  },
   "modules": {
     "lib": {
       "config.js": "1.0.0",
@@ -49,13 +49,13 @@
       }
     }
   },
-   "lms": {
-     "url_patterns": {
-       "mobius": ["*.mobius.cloud/*", "*.mobiusplatform.org/*"],
-       "smartwork5": ["*.wwnorton.com/smartwork5/*"],
-       "canvas": ["*canvas*", "*instructure.com*"]
-     }
-   },
+  "lms": {
+    "url_patterns": {
+      "mobius": ["*.mobius.cloud/*", "*.mobiusplatform.org/*"],
+      "smartwork5": ["*.wwnorton.com/smartwork5/*"],
+      "canvas": ["*canvas*", "*instructure.com*"]
+    }
+  },
   "auth": {
     "method": "personal_access_token",
     "storage_key": "lms_solver_github_token",
