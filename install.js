@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         LMS AI Solver
 // @namespace    http://tampermonkey.net/
-// @version      2.0.38
+// @version      2.0.39
 // @description  AI-powered solver for LMS platforms (Mobius, Smartwork5, Canvas)
 // @author       scrxpted7327
 // @match        *://*.mobius.cloud/*
