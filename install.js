@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         LMS AI Solver
 // @namespace    http://tampermonkey.net/
-// @version      2.0.33
+// @version      2.0.34
 // @description  AI-powered solver for LMS platforms (Mobius, Smartwork5, Canvas)
 // @author       scrxpted7327
 // @match        *://*.mobius.cloud/*
@@ -266,6 +266,13 @@ async function fetchPublicManifest() {
           code = data.content;
         } else {
           throw new Error('No content in core.js response');
+        }
+
+        // Expose GM_* functions to window for modules to use
+        if (typeof GM_xmlhttpRequest !== 'undefined') {
+          window.GM_xmlhttpRequest = GM_xmlhttpRequest;
+          window.GM_setValue = GM_setValue;
+          window.GM_getValue = GM_getValue;
         }
 
         // Execute the core.js code in the current scope
