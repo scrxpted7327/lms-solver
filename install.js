@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         LMS AI Solver
 // @namespace    http://tampermonkey.net/
-// @version      2.0.30
+// @version      2.0.31
 // @description  AI-powered solver for LMS platforms (Mobius, Smartwork5, Canvas)
 // @author       scrxpted7327
 // @match        *://*.mobius.cloud/*
@@ -229,7 +229,8 @@ async function fetchPublicManifest() {
      */
     async function loadCore() {
       try {
-        const url = 'https://api.github.com/repos/scrxpted7327/mobius_solver/contents/userscript/core.js';
+        // Always bust cache when loading core - add timestamp
+        const url = 'https://api.github.com/repos/scrxpted7327/mobius_solver/contents/userscript/core.js?t=' + Date.now();
         
         // Get PAT for authentication if available
         const pat = getPat();
