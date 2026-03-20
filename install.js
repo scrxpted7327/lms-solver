@@ -24,7 +24,6 @@
 // @connect      localhost
 // @connect      127.0.0.1
 // @connect      solver.scrxpted.cc
-// @connect      *
 // @downloadURL  https://raw.githubusercontent.com/scrxpted7327/lms-solver/refs/heads/main/install.js
 // @updateURL    https://raw.githubusercontent.com/scrxpted7327/lms-solver/refs/heads/main/version.txt
 // ==/UserScript==
