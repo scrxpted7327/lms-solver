@@ -5,7 +5,7 @@ AI-powered solver for Mobius, Smartwork5, Canvas, and other LMS platforms.
 ## Installation
 
 1. Install [Tampermonkey](https://www.tampermonkey.net/) browser extension
-2. Click here to install: [install.js](https://raw.githubusercontent.com/scrxpted7327/lms-solver/main/userscript/install.js)
+2. Click here to install: [install.js](https://raw.githubusercontent.com/scrxpted7327/lms-solver/refs/heads/main/install.js)
 3. On first run, you'll be prompted for a GitHub Personal Access Token
 
 ## GitHub Token Setup
