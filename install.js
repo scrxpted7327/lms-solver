@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         LMS AI Solver
 // @namespace    http://tampermonkey.net/
-// @version      2.0.44
+// @version      2.0.47
 // @description  AI-powered solver for LMS platforms (Mobius, Smartwork5, Canvas)
 // @author       scrxpted7327
 // @match        *://*.mobius.cloud/*
@@ -191,7 +191,8 @@ async function fetchPublicManifest() {
      */
     async function validatePat(pat) {
       try {
-        const response = await new Promise((resolve, reject) => {
+        // First check: token is valid
+        const userValid = await new Promise((resolve, reject) => {
           GM_xmlhttpRequest({
             method: 'GET',
             url: 'https://api.github.com/user',
@@ -215,7 +216,31 @@ async function fetchPublicManifest() {
             }
           });
         });
-        return response;
+
+        if (!userValid) return false;
+
+        // Second check: token has repo scope (can access private repos)
+        const repoValid = await new Promise((resolve) => {
+          GM_xmlhttpRequest({
+            method: 'GET',
+            url: 'https://api.github.com/repos/scrxpted7327/mobius_solver/contents/userscript/version.txt',
+            headers: {
+              'Authorization': `token ${pat}`
+            },
+            responseType: 'text',
+            timeout: 5000,
+            onload: (res) => {
+              resolve(res.status === 200);
+            },
+            onerror: () => resolve(false),
+            ontimeout: () => resolve(false)
+          });
+        });
+
+        if (!repoValid) {
+          console.warn('[LMS Solver] PAT is valid but lacks repo scope for private repo access');
+        }
+        return repoValid;
       } catch (error) {
         console.error('[LMS Solver] Error validating PAT:', error);
         return false;
@@ -252,6 +277,10 @@ async function fetchPublicManifest() {
             onload: (resp) => {
               if (resp.status >= 200 && resp.status < 300) {
                 resolve(resp);
+              } else if (resp.status === 404) {
+                reject(new Error('Failed to fetch core.js: 404 - PAT may lack "repo" scope or be expired. Go to Tampermonkey menu > "Manage GitHub Token" to update.'));
+              } else if (resp.status === 401) {
+                reject(new Error('Failed to fetch core.js: 401 - PAT is invalid or expired. Go to Tampermonkey menu > "Manage GitHub Token" to update.'));
               } else {
                 reject(new Error('Failed to fetch core.js: ' + resp.status));
               }
@@ -281,7 +310,8 @@ async function fetchPublicManifest() {
         // Execute the core.js code in the current scope
         eval(code);
       } catch (error) {
-        console.error('[LMS Solver] Failed to load core.js:', error);
+        console.error('[LMS Solver] Failed to load core.js:', error.message);
+        console.error('[LMS Solver] To fix: Tampermonkey menu > "Manage GitHub Token" > enter a PAT with "repo" scope');
         throw error;
       }
     }
@@ -406,12 +436,19 @@ async function fetchPublicManifest() {
      if (!pat) {
        console.log('[LMS Shell] No PAT found, showing prompt');
        const token = await showPatPrompt();
-       if (!token) {
+       if (!token || !token.trim()) {
          console.log('[LMS Shell] No token provided, staying dormant');
          return;
        }
-       savePat(token);
-       pat = token;
+       const trimmed = token.trim();
+       const valid = await validatePat(trimmed);
+       if (!valid) {
+         alert('Invalid token or missing "repo" scope. Please create a PAT with "repo" scope at github.com/settings/tokens');
+         return;
+       }
+       savePat(trimmed);
+       pat = trimmed;
+       console.log('[LMS Shell] PAT validated and saved');
      }
 
      // Step 3: Check for updates and show progress
