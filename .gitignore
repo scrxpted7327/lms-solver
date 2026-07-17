@@ -1,0 +1,7 @@
+# Public release repository: generated artifacts only.
+*
+!.gitignore
+!README.md
+!install.js
+!version.json
+!version.txt

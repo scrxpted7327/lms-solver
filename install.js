@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         LMS AI Solver
 // @namespace    http://tampermonkey.net/
-// @version      2.1.2
+// @version      2.1.4
 // @description  AI-powered solver for LMS platforms (Mobius, Smartwork5, Canvas)
 // @author       scrxpted7327
 // @match        *://*.mobius.cloud/*
@@ -29,6 +29,11 @@
 // @updateURL    https://raw.githubusercontent.com/scrxpted7327/lms-solver/refs/heads/main/version.txt
 // ==/UserScript==
 
+// These values are rewritten in public artifacts by scripts/release.py.
+const LMS_PUBLIC_RELEASE_CHANNEL = 'prod';
+const LMS_PUBLIC_RELEASE_BRANCH = 'main';
+const LMS_PRIVATE_SOURCE_BRANCH = 'main';
+
 /**
  * Fetch the public version manifest from the lms-solver repository.
  * This manifest contains version information and LMS detection patterns.
@@ -37,7 +42,8 @@
 async function fetchPublicManifest() {
   try {
     // Fetch from the public lms-solver repository
-    const url = 'https://api.github.com/repos/scrxpted7327/lms-solver/contents/version.json';
+    const url = 'https://api.github.com/repos/scrxpted7327/lms-solver/contents/version.json?ref=' +
+      encodeURIComponent(LMS_PUBLIC_RELEASE_BRANCH);
     
     return await new Promise((resolve, reject) => {
       GM_xmlhttpRequest({
@@ -224,7 +230,8 @@ async function fetchPublicManifest() {
         const repoValid = await new Promise((resolve) => {
           GM_xmlhttpRequest({
             method: 'GET',
-            url: 'https://api.github.com/repos/scrxpted7327/mobius_solver/contents/userscript/version.txt',
+            url: 'https://api.github.com/repos/scrxpted7327/mobius_solver/contents/userscript/version.txt?ref=' +
+              encodeURIComponent(LMS_PRIVATE_SOURCE_BRANCH),
             headers: {
               'Authorization': `token ${pat}`
             },
@@ -259,7 +266,8 @@ async function fetchPublicManifest() {
     async function loadCore() {
       try {
         // Always bust cache when loading core - add timestamp
-        const url = 'https://api.github.com/repos/scrxpted7327/mobius_solver/contents/userscript/core.js?t=' + Date.now();
+        const url = 'https://api.github.com/repos/scrxpted7327/mobius_solver/contents/userscript/core.js?ref=' +
+          encodeURIComponent(LMS_PRIVATE_SOURCE_BRANCH) + '&t=' + Date.now();
         
         // Get PAT for authentication if available
         const pat = getPat();
@@ -307,6 +315,9 @@ async function fetchPublicManifest() {
           window.GM_setValue = GM_setValue;
           window.GM_getValue = GM_getValue;
         }
+
+        window.LMS_RELEASE_CHANNEL = LMS_PUBLIC_RELEASE_CHANNEL;
+        window.LMS_RELEASE_BRANCH = LMS_PRIVATE_SOURCE_BRANCH;
 
         // Execute the core.js code in the current scope
         eval(code);

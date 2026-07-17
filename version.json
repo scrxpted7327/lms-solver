@@ -1,9 +1,14 @@
 {
-  "version": "2.1.2",
-  "build": "2026-03-30",
+  "version": "2.1.4",
+  "build": "2026-07-17",
+  "release": {
+    "channel": "prod",
+    "public_branch": "main",
+    "source_branch": "main"
+  },
   "shell": {
-    "script": "userscript/install.js",
-    "version": "2.1.2",
+    "script": "install.js",
+    "version": "2.1.4",
     "description": "Public shell loader - handles PAT auth and loads core from private repo"
   },
   "private_repo": {
@@ -13,7 +18,7 @@
     "api_base": "https://api.github.com/repos/scrxpted7327/mobius_solver/contents/userscript/"
   },
   "core": {
-    "version": "2.1.2",
+    "version": "2.1.4",
     "description": "Main Tampermonkey userscript with ModuleLoader, LMS detection, auto-update"
   },
   "modules": {
@@ -35,25 +40,46 @@
       "mobius": {
         "version": "1.0.0",
         "status": "stable",
-        "modules": ["detector.js", "scraper.js", "dom-handler.js", "solver.js"]
+        "modules": [
+          "detector.js",
+          "scraper.js",
+          "dom-handler.js",
+          "solver.js"
+        ]
       },
       "smartwork5": {
         "version": "0.1.0",
         "status": "beta",
-        "modules": ["detector.js", "scraper.js", "solver.js"]
+        "modules": [
+          "detector.js",
+          "scraper.js",
+          "solver.js"
+        ]
       },
       "canvas": {
         "version": "0.1.0",
         "status": "beta",
-        "modules": ["detector.js", "scraper.js", "solver.js"]
+        "modules": [
+          "detector.js",
+          "scraper.js",
+          "solver.js"
+        ]
       }
     }
   },
   "lms": {
     "url_patterns": {
-      "mobius": ["*.mobius.cloud/*", "*.mobiusplatform.org/*"],
-      "smartwork5": ["*.wwnorton.com/smartwork5/*"],
-      "canvas": ["*canvas*", "*instructure.com*"]
+      "mobius": [
+        "*.mobius.cloud/*",
+        "*.mobiusplatform.org/*"
+      ],
+      "smartwork5": [
+        "*.wwnorton.com/smartwork5/*"
+      ],
+      "canvas": [
+        "*canvas*",
+        "*instructure.com*"
+      ]
     }
   },
   "auth": {
